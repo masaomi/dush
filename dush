@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+Version = '20200130-145109'
+
+if ARGV[0] == '-h' or ARGV[0] == '--help'
+  puts "v#{Version}"
+  puts "Usage: #{File.basename(__FILE__)} (dir) [-f] [-f out.log]"
+  puts "  -f: print result in a file (default STDOUT)"
+  puts "  * only -f output dush.{date}.log"
+  exit
+end
+
+out_file = if print_op = ARGV.index("-f")
+             ARGV[print_op+1]||"dush.#{Time.now.strftime("%Y%m%d-%H%M%S")}.log"
+           end
+target_dir = if ARGV[0]=='-f'
+               "*"
+             elsif ARGV[0]
+               "#{ARGV[0]}/*"
+             else
+               "*"
+             end
+
+#p out_file
+#p target_dir
+#exit
+
+#command = "du -sh * > du.#{Time.now.strftime("%Y%m%d")}.dat_"
+command = "du -sh #{target_dir}"
+list = []
+IO.popen(command) do |io|
+  while line=io.gets
+    size, file = line.chomp.split
+    unit = size.split(//).last
+    byte = case unit
+           when 'K'
+             (size[0..-2].to_f*2**10).to_i
+           when 'M'
+             (size[0..-2].to_f*2**20).to_i
+           when 'G'
+             (size[0..-2].to_f*2**30).to_i
+           when 'T'
+             (size[0..-2].to_f*2**40).to_i
+           else
+             size.to_i
+           end
+    if File.directory?(file)
+     file << '/'
+    end 
+    list << [byte, size, file]
+  end
+end
+def pretty_byte(byte)
+  if byte > 2**40
+    "%.2f TB" % (byte.to_f/2**40)
+  elsif byte > 2**30
+    "%.2f GB" % (byte.to_f/2**30)
+  elsif byte > 2**20
+    "%.2f MB" % (byte.to_f/2**20)
+  elsif byte > 2**10
+    "%.2f KB" % (byte.to_f/2**10)
+  else
+    "#{byte} B"
+  end
+end
+
+
+sum = 0
+list.sort.reverse.each_with_index do |item, i|
+  puts [i+1].concat(item[1,100]).join("\t")
+  sum += item.first
+  if i+1 == 10
+    puts
+  end
+end
+puts "-"*30
+
+puts "Total: #{pretty_byte(sum)}"
+
+if out_file
+  open(out_file, "w") do |out|
+    dir = `pwd`.chomp + "/" + target_dir.split('/').first.gsub('*', '')
+    out.puts dir
+    list.sort.reverse.each_with_index do |item, i|
+      out.puts [i+1].concat(item[1,100]).join("\t")
+      if i+1 == 10
+        out.puts
+      end
+    end
+    out.puts "-"*30
+    out.puts "Total: #{pretty_byte(sum)}"
+  end
+end
+
